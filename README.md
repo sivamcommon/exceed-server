@@ -1,7 +1,4 @@
 # 🌱 Exceed-Backend
-
-A smart plant detection system that uses AI cameras to find and track leaves, stems, and plant defects in real-time.
-
 ---
 
 ## 🎯 What Does This Do?
