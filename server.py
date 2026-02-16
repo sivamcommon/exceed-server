@@ -16,7 +16,7 @@ import subprocess
 import cv2
 import numpy as np
 
-import infer_2model as infer
+import infer_main as infer
 
 Gst.init(None)
 
@@ -44,6 +44,7 @@ CAPTURE_HEIGHT = 1080
 STREAM_WIDTH = 1280
 STREAM_HEIGHT = 720
 
+CONFIG_PATH = os.path.join(os.path.dirname(__file__), "server_config.json")
 SETTINGS_PATH = os.path.join(os.path.dirname(__file__), "camera_settings.json")
 INFER_STATE_PATH = os.path.join(os.path.dirname(__file__), "infer_state.json")
 DEFAULT_SETTINGS = {
@@ -53,6 +54,31 @@ DEFAULT_SETTINGS = {
     "aelock": True,
     "camera_mode": "single",
 }
+
+DEFAULT_CONFIG = {
+    "exceed_enabled": False,
+}
+
+def load_config():
+    if not os.path.exists(CONFIG_PATH):
+        return DEFAULT_CONFIG.copy()
+    try:
+        with open(CONFIG_PATH, "r") as f:
+            data = json.load(f)
+        cfg = DEFAULT_CONFIG.copy()
+        if isinstance(data, dict):
+            cfg.update({k: v for k, v in data.items() if k in cfg})
+        return cfg
+    except Exception:
+        return DEFAULT_CONFIG.copy()
+
+def save_config(config):
+    with open(CONFIG_PATH, "w") as f:
+        json.dump(config, f)
+
+SERVER_CONFIG = load_config()
+save_config(SERVER_CONFIG)
+EXCEED_ENABLED = bool(SERVER_CONFIG.get("exceed_enabled", False))
 
 def load_settings():
     if not os.path.exists(SETTINGS_PATH):
@@ -226,6 +252,10 @@ MODEL_LOCK = threading.Lock()
 INFER_LOCK = threading.Lock()
 MODEL_READY = threading.Event()
 JPEG_LOCK = threading.Lock()
+
+def require_exceed():
+    if not EXCEED_ENABLED:
+        raise HTTPException(status_code=403, detail="exceed_disabled")
 
 def get_models():
     global MAIN_MODEL, DEFECT_MODEL
@@ -475,6 +505,10 @@ def infer_worker(cam_state: CameraState):
         time.sleep(interval)
 
 def update_infer_workers():
+    if not EXCEED_ENABLED:
+        for cam_state in CAMERAS.values():
+            cam_state.infer_running = False
+        return
     with STREAM_MODE_LOCK:
         stream_infer = STREAM_MODE == "infer"
     for cam_state in CAMERAS.values():
@@ -630,6 +664,8 @@ def mjpeg_generator(cam_state: CameraState):
                 continue
         with STREAM_MODE_LOCK:
             mode = STREAM_MODE
+        if not EXCEED_ENABLED and mode == "infer":
+            mode = "raw"
         if mode == "infer":
             inferred = get_latest_infer_bgr(cam_state)
             if inferred is not None:
@@ -799,6 +835,9 @@ async def set_stream_mode(
         raise HTTPException(status_code=400, detail="mode_must_be_raw_or_infer")
     if source is not None and source not in ("camera", "video"):
         raise HTTPException(status_code=400, detail="source_must_be_camera_or_video")
+    if not EXCEED_ENABLED:
+        if mode == "infer" or source == "video" or size_config is not None or mm_per_px is not None:
+            raise HTTPException(status_code=403, detail="exceed_disabled")
     with INFER_SOURCE_LOCK:
         current_source = INFER_SOURCE
     desired_source = source if source is not None else current_source
@@ -859,6 +898,7 @@ async def set_stream_mode(
 
 @app.get("/infer/stats")
 def infer_stats(cam: int = 0):
+    require_exceed()
     with TRACK_STATS_LOCK:
         stats = TRACK_STATS.get(cam)
         if stats is None:
@@ -891,12 +931,13 @@ def capture(request: Request, cam: int = 0):
         "url": f"/media/images/{filename}",
     }
 
-@app.post("/record/start")
-def record_start(request: Request, cam: int = 0, mode: str = Form("raw")):
+def _record_start(cam: int, mode: str):
     if cam not in CAMERAS:
         raise HTTPException(status_code=404, detail="camera_not_available")
     if mode not in ("raw", "infer"):
         raise HTTPException(status_code=400, detail="mode_must_be_raw_or_infer")
+    if mode == "infer" and not EXCEED_ENABLED:
+        raise HTTPException(status_code=403, detail="exceed_disabled")
     cam_state = CAMERAS[cam]
     started = start_recording(cam_state, mode)
     if not started:
@@ -908,8 +949,16 @@ def record_start(request: Request, cam: int = 0, mode: str = Form("raw")):
         "url": f"/media/videos/{os.path.basename(cam_state.current_video_path)}",
     }
 
-@app.post("/record/stop")
-def record_stop(request: Request, cam: int = 0):
+@app.post("/record/start")
+def record_start(request: Request, cam: int = 0, mode: str = Form("raw")):
+    return _record_start(cam=cam, mode=mode)
+
+@app.get("/record/start")
+def record_start_get(cam: int = 0, mode: str = "raw"):
+    # GET alias for Imager compatibility
+    return _record_start(cam=cam, mode=mode)
+
+def _record_stop(cam: int):
     if cam not in CAMERAS:
         raise HTTPException(status_code=404, detail="camera_not_available")
     cam_state = CAMERAS[cam]
@@ -948,3 +997,12 @@ def record_stop(request: Request, cam: int = 0):
             start_all_cameras()
 
     return {"status": "recording_stopped", "file": file_url, "url": url}
+
+@app.post("/record/stop")
+def record_stop(request: Request, cam: int = 0):
+    return _record_stop(cam=cam)
+
+@app.get("/record/stop")
+def record_stop_get(cam: int = 0):
+    # GET alias for Imager compatibility
+    return _record_stop(cam=cam)
