@@ -1,9 +1,11 @@
 """Model loading utilities."""
 
 from ultralytics import YOLO
+from .config import load_config
 
-ENGINE_PATH = "models/best.engine"
-DEFECT_ENGINE_PATH = "models/defect.engine"
+_CFG = load_config()
+ENGINE_PATH = _CFG.get("models", {}).get("main", "models/best.engine")
+DEFECT_ENGINE_PATH = _CFG.get("models", {}).get("defect", "models/defect.engine")
 
 
 def load_model(engine_path: str = ENGINE_PATH):

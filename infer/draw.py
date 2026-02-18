@@ -5,7 +5,7 @@ import cv2
 from .core import class_name
 
 
-def draw_main_boxes(frame_bgr, xyxy, conf, cls_ids, names, keep_indices):
+def draw_main_boxes(frame_bgr, xyxy, conf, cls_ids, names, keep_indices, colors, thickness):
     if xyxy is None or len(keep_indices) == 0:
         return frame_bgr.copy()
 
@@ -17,13 +17,13 @@ def draw_main_boxes(frame_bgr, xyxy, conf, cls_ids, names, keep_indices):
         cname = class_name(names, int(cls_ids[i]))
         cname_l = str(cname).strip().lower()
         if cname_l in ("leaf", "spinach"):
-            box_color = (0, 255, 0)
+            box_color = tuple(colors.get("leaf", (0, 255, 0)))
         elif cname_l in ("stem", "leaf stem"):
-            box_color = (144, 238, 144)
+            box_color = tuple(colors.get("stem", (144, 238, 144)))
         else:
-            box_color = (0, 0, 255)
-        label = f"{cname} {conf[i]:.2f}"
-        cv2.rectangle(img, (int(x1), int(y1)), (int(x2), int(y2)), box_color, 2)
+            box_color = tuple(colors.get("other", (0, 0, 255)))
+        label = f"{cname}"
+        cv2.rectangle(img, (int(x1), int(y1)), (int(x2), int(y2)), box_color, thickness)
         cv2.putText(
             img,
             label,
@@ -37,7 +37,7 @@ def draw_main_boxes(frame_bgr, xyxy, conf, cls_ids, names, keep_indices):
     return img
 
 
-def draw_defects(annotated, defects):
+def draw_defects(annotated, defects, colors, thickness):
     defect_found = False
     for d in defects:
         defect_found = True
@@ -45,15 +45,21 @@ def draw_defects(annotated, defects):
         cname = d["name"]
         cname_l = str(cname).strip().lower()
         if "yellow" in cname_l:
-            box_color = (0, 255, 255)
+            box_color = tuple(colors.get("yellow", (0, 255, 255)))
+            label = "YL"
         elif "white" in cname_l:
-            box_color = (255, 255, 255)
+            box_color = tuple(colors.get("white", (255, 255, 255)))
+            label = "WS"
         elif "ipd" in cname_l:
-            box_color = (0, 0, 255)
+            box_color = tuple(colors.get("ipd", (0, 0, 255)))
+            label = "IPD"
+        elif cname_l in ("stem", "leaf stem"):
+            box_color = tuple(colors.get("stem", (144, 238, 144)))
+            label = "STM"
         else:
-            box_color = (0, 0, 255)
-        label = f"{cname} {d['conf']:.2f}"
-        cv2.rectangle(annotated, (gx1, gy1), (gx2, gy2), box_color, 2)
+            box_color = tuple(colors.get("other", (0, 0, 255)))
+            label = str(cname).upper()
+        cv2.rectangle(annotated, (gx1, gy1), (gx2, gy2), box_color, thickness)
         cv2.putText(
             annotated,
             label,

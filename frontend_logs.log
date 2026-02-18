@@ -1,9 +1,9 @@
-2026-02-16 14:30:06,228 - Starting camera pipeline...
-2026-02-16 14:30:06,228 - Found cameras: [0]
-2026-02-16 14:30:06,228 - Single camera mode enabled
-2026-02-16 14:30:06,922 - Camera 0 started successfully
-2026-02-16 14:30:06,923 - Camera pipeline startup complete
-2026-02-16 14:30:06,923 - YOLO model will be loaded on first inference request (lazy loading)
-2026-02-16 15:14:20,954 - Camera 0 started successfully
-2026-02-16 15:14:25,289 - Camera 0 started successfully
-2026-02-16 15:14:30,083 - Camera 0 started successfully
+2026-02-18 16:43:25,303 - Starting camera pipeline...
+2026-02-18 16:43:25,304 - Found cameras: [0]
+2026-02-18 16:43:25,304 - Single camera mode enabled
+2026-02-18 16:43:26,021 - Camera 0 started successfully
+2026-02-18 16:43:26,021 - Camera pipeline startup complete
+2026-02-18 16:43:26,021 - YOLO model will be loaded on first inference request (lazy loading)
+2026-02-18 16:44:35,114 - Loading YOLO models...
+2026-02-18 16:44:35,137 - YOLO models loaded successfully
+2026-02-18 16:44:51,529 - Camera 0 started successfully

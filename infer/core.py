@@ -43,9 +43,12 @@ def run_defect_on_leaf(
     defect_model,
     frame_bgr,
     leaf_box: Tuple[float, float, float, float],
-    imgsz: int,
+    imgsz: int | None,
     conf: float,
     device: int,
+    conf_stem: float = 0.45,
+    conf_other: float = 0.45,
+    min_area_px: dict | None = None,
 ):
     """Run defect model on a single leaf crop and return list of defect dicts."""
     x1, y1, x2, y2 = leaf_box
@@ -59,13 +62,15 @@ def run_defect_on_leaf(
     if crop.size == 0:
         return []
 
-    d_results = defect_model.predict(
-        source=crop,
-        verbose=False,
-        imgsz=imgsz,
-        conf=conf,
-        device=device,
-    )
+    predict_kwargs = {
+        "source": crop,
+        "verbose": False,
+        "conf": conf,
+        "device": device,
+    }
+    if imgsz is not None:
+        predict_kwargs["imgsz"] = imgsz
+    d_results = defect_model.predict(**predict_kwargs)
     d_res = d_results[0]
     if d_res.boxes is None or len(d_res.boxes) == 0:
         return []
@@ -79,11 +84,31 @@ def run_defect_on_leaf(
     for j in range(len(d_xyxy)):
         dx1, dy1, dx2, dy2 = d_xyxy[j]
         cname = class_name(d_names, int(d_cls_ids[j]))
-        if cname == "stem":
+        cconf = float(d_conf[j])
+        cname_l = str(cname).strip().lower()
+        if cname_l in ("stem", "leaf stem"):
+            if cconf < conf_stem:
+                continue
+        else:
+            if cconf < conf_other:
+                continue
+        # Minimum area filter per defect type
+        key = "other"
+        if "yellow" in cname_l:
+            key = "yellow"
+        elif "white" in cname_l:
+            key = "white"
+        elif "ipd" in cname_l:
+            key = "ipd"
+        elif cname_l in ("stem", "leaf stem"):
+            key = "stem"
+        min_area = 0 if min_area_px is None else float(min_area_px.get(key, 0))
+        area = max(0.0, (dx2 - dx1) * (dy2 - dy1))
+        if area < min_area:
             continue
         defects.append({
             "box": (ix1 + int(dx1), iy1 + int(dy1), ix1 + int(dx2), iy1 + int(dy2)),
             "name": cname,
-            "conf": float(d_conf[j]),
+            "conf": cconf,
         })
     return defects

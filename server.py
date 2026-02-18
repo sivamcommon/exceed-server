@@ -119,6 +119,37 @@ def save_infer_state(state):
 
 INFER_STATE = load_infer_state()
 
+def reset_infer_state_file():
+    """Clear infer_state.json so stats are per-video session."""
+    global INFER_STATE
+    def _default_last_video():
+        defaults = {}
+        top_name = "top_infer.mp4"
+        bottom_name = "bottom_infer.mp4"
+        defaults["0"] = {
+            "file": os.path.abspath(os.path.join(video_dir, top_name)),
+            "url": f"/media/videos/{top_name}",
+            "mode": "infer",
+            "ts": 0,
+        }
+        defaults["1"] = {
+            "file": os.path.abspath(os.path.join(video_dir, bottom_name)),
+            "url": f"/media/videos/{bottom_name}",
+            "mode": "infer",
+            "ts": 0,
+        }
+        return defaults
+
+    INFER_STATE = {"stats": {}, "last_video": _default_last_video()}
+    save_infer_state(INFER_STATE)
+
+def stop_all_infer_workers():
+    for cam_state in CAMERAS.values():
+        cam_state.infer_running = False
+    for cam_state in CAMERAS.values():
+        if cam_state.infer_thread and cam_state.infer_thread.is_alive():
+            cam_state.infer_thread.join(timeout=2.0)
+
 AVAILABLE_CAMS = {
     0: os.path.exists("/dev/video0"),
     1: os.path.exists("/dev/video1"),
@@ -233,7 +264,7 @@ def persist_stats_now(cam_id):
             return
         summary = stats.get("summary", {})
         if not isinstance(summary, dict):
-            return
+            summary = {}
         INFER_STATE.setdefault("stats", {})
         INFER_STATE["stats"][str(cam_id)] = summary
         save_infer_state(INFER_STATE)
@@ -625,6 +656,14 @@ def handle_video_eof():
         INFER_SOURCE = "camera"
         VIDEO_ENDED = True
     stop_all_recordings()
+    # Persist stats on video end (same behavior as stop)
+    stop_all_infer_workers()
+    last_video = INFER_STATE.get("last_video", {})
+    reset_infer_state_file()
+    INFER_STATE["last_video"] = last_video
+    save_infer_state(INFER_STATE)
+    for cam_id in CAMERAS.keys():
+        persist_stats_now(cam_id)
     safe_start_all_cameras()
     update_infer_workers()
 
@@ -868,6 +907,8 @@ async def set_stream_mode(
         else:
             safe_start_all_cameras()
     if mode == "infer":
+        # Reset stats at the start of each infer video session
+        reset_infer_state_file()
         reset_track_stats()
         for cam_state in CAMERAS.values():
             start_recording(cam_state, "infer")
@@ -899,15 +940,9 @@ async def set_stream_mode(
 @app.get("/infer/stats")
 def infer_stats(cam: int = 0):
     require_exceed()
-    with TRACK_STATS_LOCK:
-        stats = TRACK_STATS.get(cam)
-        if stats is None:
-            summary = {}
-        else:
-            summary = stats.get("summary", {})
-    last_video = INFER_STATE.get("last_video", {}).get(str(cam))
-    if not summary and isinstance(INFER_STATE.get("stats", {}).get(str(cam)), dict):
-        summary = INFER_STATE["stats"][str(cam)]
+    state = load_infer_state()
+    summary = state.get("stats", {}).get(str(cam), {})
+    last_video = state.get("last_video", {}).get(str(cam))
     with INFER_SOURCE_LOCK:
         video_ended = VIDEO_ENDED
     return {"status": "ok", "summary": summary, "last_video": last_video, "video_ended": video_ended}
@@ -995,6 +1030,15 @@ def _record_stop(cam: int):
                 INFER_VIDEO_CAP.release()
                 INFER_VIDEO_CAP = None
             start_all_cameras()
+
+    # Stop all inference workers and persist latest stats to file
+    stop_all_infer_workers()
+    last_video = INFER_STATE.get("last_video", {})
+    reset_infer_state_file()
+    INFER_STATE["last_video"] = last_video
+    save_infer_state(INFER_STATE)
+    for cam_id in CAMERAS.keys():
+        persist_stats_now(cam_id)
 
     return {"status": "recording_stopped", "file": file_url, "url": url}
 

@@ -96,6 +96,7 @@ def compute_size_summary(
 
     tracks = stats.get("tracks", {})
     track_sizes = stats.get("track_sizes", {})
+    leaf_stems = stats.get("leaf_stems", {})
 
     final_class = {}
     for tid, info in tracks.items():
@@ -135,11 +136,15 @@ def compute_size_summary(
                 summary["leaf"]["in_spec"] += 1
             else:
                 summary["leaf"]["out_spec"] += 1
-        elif cls_name in stem_set:
-            h_min, h_max = get_range(size_cfg.get("stem", {}), "height")
-            w_min, w_max = get_range(size_cfg.get("stem", {}), "width")
+
+    # Stem sizes come from second-model detections (per-leaf lists).
+    if leaf_stems:
+        h_min, h_max = get_range(size_cfg.get("stem", {}), "height")
+        for height_mm in leaf_stems.values():
+            if height_mm is None:
+                continue
             summary["stem"]["count"] += 1
-            if (h_min <= height_mm <= h_max) and (w_min <= width_mm <= w_max):
+            if h_min <= float(height_mm) <= h_max:
                 summary["stem"]["in_spec"] += 1
             else:
                 summary["stem"]["out_spec"] += 1
