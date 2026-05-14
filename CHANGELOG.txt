@@ -1,0 +1,2 @@
+v1.0.0 — 2026-05-14
+Fixed rfdetr model not loading (imgsz 640→512, switched to fp16 engine). Removed sudo password prompt at startup, added configurable GC interval per frame.
