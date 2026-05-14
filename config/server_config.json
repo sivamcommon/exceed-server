@@ -1,0 +1,31 @@
+{
+  "model_related": {
+    "exceed_enabled": true
+  },
+  "mode_related": {
+    "start_camera_on_boot": true,
+    "auto_resume_camera_after_video_infer": false,
+    "stable_runtime_mode": false,
+    "stream_fps": 20,
+    "infer_fps": 20,
+    "realtime_mode": true,
+    "buffer_sizes": {
+      "gst_queue": 20,
+      "appsink": 20,
+      "infer_queue": 20
+    },
+    "processing_mode": "live_process",
+    "record_mode_process_fps": 20.0,
+    "record_mode_capture_fps": 20.0,
+    "record_mode_unload_models_on_complete": true
+  },
+  "others": {
+    "monitor_enabled": true,
+    "monitor_interval_sec": 1,
+    "ram_log_enabled": false,
+    "ram_log_interval_sec": 2,
+    "contig_diag_enabled": false,
+    "contig_diag_interval_sec": 2,
+    "live_plot_gui_enabled": false
+  }
+}

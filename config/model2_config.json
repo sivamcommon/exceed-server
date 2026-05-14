@@ -1,0 +1,156 @@
+{
+  "model": {
+    "path": "models/rfdetr_fp16.engine",
+    "backend": "rfdetr",
+    "config": {
+      "size_measure_enabled": false,
+      "size_measure_classes": [],
+      "size_measure_thresholds_cm": {
+        "length": {
+          "min": 0.0,
+          "max": 0.0
+        },
+        "width": {
+          "min": 0.0,
+          "max": 0.0
+        }
+      },
+      "size_final_logic": "auto",
+      "imgsz": 512,
+      "rfdetr_num_classes": 6,
+      "conf_stem": 0.3,
+      "conf_other": 0.3,
+      "stem_size_source": "model",
+      "opencv_stem_min_length_px": 12,
+      "debug_log_detections": false,
+      "debug_log_every_n_frames": 5,
+      "debug_log_raw_candidates": false,
+      "debug_log_filter_reasons": false,
+      "draw_stem": false,
+      "box_thickness": 2,
+      "vote_thresholds": {
+        "min_count": 2
+      }
+    }
+  },
+  "classes": {
+    "whitespot": {
+      "aliases": [
+        "whitespot",
+        "white spot",
+        "white_spot",
+        "ws"
+      ],
+      "label": "whitespot",
+      "confidence": 0.3,
+      "color": [
+        255,
+        255,
+        255
+      ],
+      "min_w": 1,
+      "min_h": 1,
+      "min_area_px": 10,
+      "role": "defect"
+    },
+    "ipd": {
+      "aliases": [
+        "ipd",
+        "black hole",
+        "bh"
+      ],
+      "label": "IPD",
+      "confidence": 0.3,
+      "color": [
+        255,
+        255,
+        255
+      ],
+      "min_w": 1,
+      "min_h": 1,
+      "min_area_px": 10,
+      "role": "defect"
+    },
+    "torn": {
+      "aliases": [
+        "torn"
+      ],
+      "label": "TORN",
+      "confidence": 0.2,
+      "color": [
+        255,
+        255,
+        255
+      ],
+      "min_w": 10,
+      "min_h": 10,
+      "min_area_px": 10,
+      "role": "defect"
+    },
+    "bruise": {
+      "aliases": [
+        "bruise",
+        "bruised"
+      ],
+      "label": "Bruise",
+      "confidence": 0.3,
+      "color": [
+        255,
+        255,
+        255
+      ],
+      "min_w": 20,
+      "min_h": 20,
+      "min_area_px": 100,
+      "role": "defect"
+    },
+    "mud": {
+      "aliases": [
+        "mud",
+        "soil"
+      ],
+      "label": "MUD",
+      "confidence": 0.3,
+      "color": [
+        255,
+        255,
+        255
+      ],
+      "min_w": 30,
+      "min_h": 30,
+      "min_area_px": 10,
+      "role": "defect"
+    },
+    "leaf stem": {
+      "aliases": [
+        "leaf stem",
+        "stem",
+        "leaf_stem"
+      ],
+      "label": "STM",
+      "confidence": 0.3,
+      "color": [
+        144,
+        238,
+        144
+      ],
+      "min_w": 0,
+      "min_h": 0,
+      "min_area_px": 10,
+      "role": "ignore"
+    },
+    "_default": {
+      "label": "UNK",
+      "confidence": 0.3,
+      "color": [
+        255,
+        255,
+        255
+      ],
+      "min_w": 0,
+      "min_h": 0,
+      "min_area_px": 10,
+      "role": "defect"
+    }
+  }
+}

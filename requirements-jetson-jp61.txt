@@ -1,0 +1,36 @@
+# JetPack 6.1 (Python 3.10, aarch64) — install inside your venv only (no sudo pip).
+#
+#   cd ~/Gomicro_Common/Server2 && source .venv/bin/activate
+#   pip install -U pip setuptools wheel
+#   pip install -r requirements-jetson-jp61.txt
+#
+# Installs Jetson-compatible PyTorch wheels from Ultralytics assets first, then the
+# rest of the Server2 stack. PyPI `torch` on aarch64 is not Jetson/CUDA aligned.
+#
+# Includes onnxruntime + onnxslim for YOLO export / ONNX slimming (CPU ORT on aarch64).
+#
+# Full torchvision URL (your paste was truncated):
+#   https://github.com/ultralytics/assets/releases/download/v0.0.0/torchvision-0.25.0-cp310-cp310-linux_aarch64.whl
+
+https://github.com/ultralytics/assets/releases/download/v0.0.0/torch-2.10.0-cp310-cp310-linux_aarch64.whl
+https://github.com/ultralytics/assets/releases/download/v0.0.0/torchvision-0.25.0-cp310-cp310-linux_aarch64.whl
+
+fastapi
+uvicorn[standard]
+python-multipart
+numpy>=1.23.5,<2.0
+opencv-python
+psutil
+lap>=0.5.12
+ultralytics[export]
+PyYAML
+requests
+fpdf
+Pillow
+matplotlib
+rfdetr
+supervision
+onnx
+onnxscript
+onnxslim
+onnxruntime

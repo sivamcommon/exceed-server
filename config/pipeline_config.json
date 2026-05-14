@@ -1,0 +1,90 @@
+{
+  "infer": {
+    "preload_models": true,
+    "unload_on_stop": false,
+    "video_source_path": "media/videos/local/sample.mp4",
+    "tracking_enabled": true,
+    "warmup_main_image": "",
+    "warmup_defect_image": "",
+    "gc_every_n_frames": 10
+  },
+  "size": {
+    "cm_per_px": 0.01,
+    "selected_category": "Spinach",
+    "categories": {
+      "Spinach": {
+        "default": {
+          "length": {
+            "min": 2.0,
+            "max": 12.0
+          },
+          "width": {
+            "min": 2.0,
+            "max": 6.0
+          }
+        },
+        "other": {
+          "length": {
+            "min": 1.0,
+            "max": 4.0
+          },
+          "width": {
+            "min": 0.0,
+            "max": 2.0
+          }
+        }
+      },
+      "Strawberry": {
+        "default": {
+          "length": {
+            "min": 10.0,
+            "max": 12.0
+          },
+          "width": {
+            "min": 4.0,
+            "max": 6.0
+          }
+        },
+        "other": {
+          "length": {
+            "min": 1.0,
+            "max": 4.0
+          },
+          "width": {
+            "min": 0.0,
+            "max": 2.0
+          }
+        }
+      },
+      "default": {
+        "default": {
+          "length": {
+            "min": 0.0,
+            "max": 9999.0
+          },
+          "width": {
+            "min": 0.0,
+            "max": 9999.0
+          }
+        },
+        "other": {
+          "length": {
+            "min": 0.0,
+            "max": 9999.0
+          },
+          "width": {
+            "min": 0.0,
+            "max": 9999.0
+          }
+        }
+      }
+    },
+    "max_full_leaf": 100,
+    "size_debug": false,
+    "size_debug_color": [
+      255,
+      150,
+      0
+    ]
+  }
+}

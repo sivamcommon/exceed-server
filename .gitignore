@@ -1,0 +1,41 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+
+# Models (large binary files — store separately)
+models/*.engine
+models/*.onnx
+models/*.pt
+models/*.pth
+models/new/
+models/old/
+
+# Logs
+*.log
+monitor.log
+infer_debug.log
+frontend_logs.log
+contig_diag.log
+
+# Media / video (large files)
+media/videos/spool/
+media/videos/local/
+media/videos/top_infer_processed.mp4
+local_video/
+
+# Runtime state
+infer_state.json
+data/
+
+# Debian packages
+*.deb
+
+# IDE
+.codex
+.vscode/
+
+# YOLO runs
+runs/

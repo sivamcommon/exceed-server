@@ -1,0 +1,10 @@
+{
+  "wbmode": 3,
+  "exposure_us": 3000000,
+  "gain_min": 8.0,
+  "gain_max": 8.0,
+  "digital_gain_min": 1.0,
+  "digital_gain_max": 1.0,
+  "aelock": true,
+  "camera_mode": "single"
+}

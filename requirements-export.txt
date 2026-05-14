@@ -1,0 +1,7 @@
+# Deprecated — `onnxslim` and `onnxruntime` are included in:
+#   requirements.txt
+#   requirements-jetson-jp61.txt
+#
+# Kept so old commands still work:
+onnxslim
+onnxruntime

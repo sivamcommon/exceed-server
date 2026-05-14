@@ -1,0 +1,29 @@
+# Use the project venv only — do NOT run `sudo pip install` (that targets system Python).
+#   cd ~/Gomicro_Common/Server2 && source .venv/bin/activate
+#   pip install -r requirements.txt
+#
+# Jetson JP 6.1 (aarch64): use `requirements-jetson-jp61.txt` instead of this file so
+# PyTorch/torchvision come from Ultralytics Jetson wheels before Ultralytics.
+#
+# Jetson / aarch64: PyPI has no `onnxruntime-gpu`; `onnxruntime` (CPU) is included below for export/slimming.
+
+fastapi
+uvicorn[standard]
+python-multipart
+numpy>=1.23.5,<2.0
+opencv-python
+psutil
+lap>=0.5.12
+ultralytics
+torch
+PyYAML
+requests
+fpdf
+Pillow
+matplotlib
+rfdetr
+supervision
+onnx
+onnxscript
+onnxslim
+onnxruntime

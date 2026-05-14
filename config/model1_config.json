@@ -1,0 +1,137 @@
+{
+  "model": {
+    "path": "models/good_seg_v26_640.engine",
+    "backend": "yolo",
+    "config": {
+      "model2_pass_classes": [
+        "all"
+      ],
+      "object_classes": [
+        "all"
+      ],
+      "main_defect_classes": [
+        "torn",
+        "cut",
+        "cotyled"
+      ],
+      "size_measure_classes": [
+        "all"
+      ],
+      "imgsz": 640,
+      "model_type": "seg",
+      "render": "box",
+      "conf_leaf": 0.5,
+      "box_thickness": 4,
+      "mask_alpha": 0.35,
+      "roi_enabled": true,
+      "roi_margin_pct": 5,
+      "roi_min_overlap": 0.5,
+      "roi_filter_mode": "center",
+      "roi_debug_draw": false,
+      "roi_debug_color": [
+        190,
+        190,
+        190
+      ],
+      "roi_debug_thickness": 1
+    }
+  },
+  "classes": {
+    "good": {
+      "aliases": [
+        "good"
+      ],
+      "label": "GOOD",
+      "role": "leaf",
+      "confidence": 0.5,
+      "min_w": 30,
+      "min_h": 30,
+      "color": [
+        0,
+        255,
+        0
+      ],
+      "mask_color": [
+        0,
+        255,
+        0
+      ]
+    },
+    "torn": {
+      "aliases": [
+        "torn"
+      ],
+      "label": "TORN",
+      "role": "defect",
+      "confidence": 0.5,
+      "min_w": 30,
+      "min_h": 30,
+      "color": [
+        0,
+        165,
+        255
+      ],
+      "mask_color": [
+        0,
+        165,
+        255
+      ]
+    },
+    "cut": {
+      "aliases": [
+        "cut"
+      ],
+      "label": "CUT",
+      "role": "defect",
+      "confidence": 0.5,
+      "min_w": 0,
+      "min_h": 0,
+      "color": [
+        0,
+        0,
+        255
+      ],
+      "mask_color": [
+        0,
+        0,
+        255
+      ]
+    },
+    "cotyled": {
+      "aliases": [
+        "cotyled"
+      ],
+      "label": "COTYLED",
+      "role": "defect",
+      "confidence": 0.5,
+      "min_w": 0,
+      "min_h": 0,
+      "color": [
+        0,
+        0,
+        255
+      ],
+      "mask_color": [
+        0,
+        0,
+        255
+      ]
+    },
+    "_default": {
+      "label": "UNK",
+      "confidence": 0.3,
+      "min_w": 0,
+      "min_h": 0,
+      "color": [
+        0,
+        0,
+        255
+      ],
+      "mask_color": [
+        0,
+        0,
+        255
+      ]
+    }
+  }
+}
