@@ -1,3 +1,6 @@
+v1.2.0 — 2026-05-15
+Fixed remaining per-frame GPU bottlenecks: retina_masks=False (stops upsampling all masks to 1920×1080), polygon mask path in extract_masked_leaf_crop (zero CUDA syncs for cropping), get_class_config called once per batch not per leaf.
+
 v1.1.0 — 2026-05-15
 Dynamic-batch RF-DETR engine: re-exported ONNX with dynamic_batch=True, built rfdetr_dynamic_fp16.engine (batch 1–16). All leaves now processed in one GPU call per frame instead of N sequential calls (~5–10× stage-2 speedup for typical leaf counts).
 

@@ -823,7 +823,7 @@ def infer_frame_leaf_grouped_tracked(
         "device": device,
     }
     if main_model_type == "seg":
-        base_kwargs["retina_masks"] = True
+        base_kwargs["retina_masks"] = False
     if main_imgsz is not None:
         base_kwargs["imgsz"] = main_imgsz
 
@@ -994,7 +994,16 @@ def infer_frame_leaf_grouped_tracked(
         for _i in keep_indices:
             _x1, _y1, _x2, _y2 = xyxy_use[_i]
             _leaf_boxes_batch.append((_x1, _y1, _x2, _y2))
-            _lm = masks[_i] if (main_model_type == "seg" and masks is not None and _i < len(masks)) else None
+            if main_model_type == "seg":
+                # Prefer CPU polygon (masks_xy) over GPU tensor to avoid CUDA sync per leaf.
+                if masks_xy is not None and _i < len(masks_xy) and masks_xy[_i] is not None and len(masks_xy[_i]):
+                    _lm = masks_xy[_i]
+                elif masks is not None and _i < len(masks):
+                    _lm = masks[_i]
+                else:
+                    _lm = None
+            else:
+                _lm = None
             _leaf_masks_batch.append(_lm)
         _batch_defects = run_defect_batch(
             defect_model, frame_bgr, _leaf_boxes_batch, _leaf_masks_batch,

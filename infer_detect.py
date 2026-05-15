@@ -686,30 +686,35 @@ def extract_masked_leaf_crop(frame_bgr, leaf_box: Tuple[float, float, float, flo
         return None
 
     if leaf_mask is not None:
-        mask = leaf_mask
-        if hasattr(mask, "cpu"):
-            mask = mask.cpu().numpy()
-        if mask.shape[:2] != frame_bgr.shape[:2]:
-            mask = cv2.resize(
-                mask.astype(np.float32),
-                (frame_bgr.shape[1], frame_bgr.shape[0]),
-                interpolation=cv2.INTER_LINEAR,
-            )
+        crop_h, crop_w = iy2 - iy1, ix2 - ix1
+        # Polygon path (masks_xy): no CUDA sync, no full-frame resize.
+        if isinstance(leaf_mask, np.ndarray) and leaf_mask.ndim == 2 and leaf_mask.shape[-1] == 2:
+            poly = leaf_mask.astype(np.float32) - np.array([[ix1, iy1]], dtype=np.float32)
+            mask_bin = np.zeros((crop_h, crop_w), dtype=np.uint8)
+            cv2.fillPoly(mask_bin, [poly.astype(np.int32)], 1)
         else:
-            mask = mask.astype(np.float32)
-        mask_crop = mask[iy1:iy2, ix1:ix2]
-        mask_bin = (mask_crop > 0.5).astype(np.uint8)
+            # GPU tensor fallback
+            mask = leaf_mask
+            if hasattr(mask, "cpu"):
+                mask = mask.cpu().numpy()
+            if mask.shape[:2] != frame_bgr.shape[:2]:
+                mask = cv2.resize(
+                    mask.astype(np.float32),
+                    (frame_bgr.shape[1], frame_bgr.shape[0]),
+                    interpolation=cv2.INTER_LINEAR,
+                )
+            else:
+                mask = mask.astype(np.float32)
+            mask_bin = (mask[iy1:iy2, ix1:ix2] > 0.5).astype(np.uint8)
         kern_close = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
         mask_bin = cv2.morphologyEx(mask_bin, cv2.MORPH_CLOSE, kern_close)
         kern_open = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
         mask_bin = cv2.morphologyEx(mask_bin, cv2.MORPH_OPEN, kern_open)
-        # Shrink the edge slightly so stage-2 sees less dark halo/background.
         kern_erode = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (7, 7))
         mask_bin = cv2.erode(mask_bin, kern_erode, iterations=2)
         if mask_bin.size == 0 or mask_bin.max() == 0:
             return None
         crop = crop.copy()
-        # White background outside leaf polygon (defect model + OpenCV stem expect uniform bg)
         crop[mask_bin == 0] = (255, 255, 255)
 
     return crop
