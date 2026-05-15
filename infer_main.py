@@ -51,6 +51,7 @@ from infer_detect import (
     filter_indices_by_roi_overlap,
     roi_bounds_from_frame,
     run_defect_on_leaf,
+    run_defect_batch,
     extract_masked_leaf_crop,
 )
 from infer_rfdetr import RFDETRDefectWrapper, RFDETRTrackedWrapper
@@ -987,7 +988,20 @@ def infer_frame_leaf_grouped_tracked(
             setattr(infer_frame_leaf_grouped_tracked, "_debug_counter", counter)
             stage2_debug_should_log = (counter % debug_every_n == 0)
 
-        for i in keep_indices:
+        # Batch all leaves into one GPU call when the dynamic-batch engine is loaded.
+        _leaf_boxes_batch = []
+        _leaf_masks_batch = []
+        for _i in keep_indices:
+            _x1, _y1, _x2, _y2 = xyxy_use[_i]
+            _leaf_boxes_batch.append((_x1, _y1, _x2, _y2))
+            _lm = masks[_i] if (main_model_type == "seg" and masks is not None and _i < len(masks)) else None
+            _leaf_masks_batch.append(_lm)
+        _batch_defects = run_defect_batch(
+            defect_model, frame_bgr, _leaf_boxes_batch, _leaf_masks_batch,
+            defect_imgsz, conf, device, min_area_px=min_area_px,
+        )
+
+        for _loop_pos, i in enumerate(keep_indices):
             m2_calls_frame += 1
             x1, y1, x2, y2 = xyxy_use[i]
             raw_main_name = str(class_name(names, int(cls_ids[i]))).strip().lower()
@@ -997,23 +1011,20 @@ def infer_frame_leaf_grouped_tracked(
                 or str(main_cls_entry.get("role", "")).strip().lower() == "defect"
             )
 
-            # Get leaf mask for masked cropping (seg model only)
-            leaf_mask = None
-            if main_model_type == "seg" and masks is not None:
-                if i < len(masks):
-                    leaf_mask = masks[i]
-
+            leaf_mask = _leaf_masks_batch[_loop_pos]
             leaf_tid_dbg = int(track_ids[i]) if track_ids is not None else None
 
-            # Run defect model on this leaf's crop
-            defects = run_defect_on_leaf(
-                defect_model, frame_bgr, (x1, y1, x2, y2), leaf_mask,
-                defect_imgsz, conf, device,
-                min_area_px=min_area_px,
-                debug_log_raw=stage2_debug_should_log and debug_log_raw,
-                debug_log_filter_reasons=stage2_debug_should_log and debug_log_drop,
-                debug_leaf_tid=leaf_tid_dbg,
-            )
+            defects = _batch_defects[_loop_pos]
+            if not _batch_defects[_loop_pos] and stage2_debug_should_log and (debug_log_raw or debug_log_drop):
+                # Re-run single leaf for debug logging path only
+                defects = run_defect_on_leaf(
+                    defect_model, frame_bgr, (x1, y1, x2, y2), leaf_mask,
+                    defect_imgsz, conf, device,
+                    min_area_px=min_area_px,
+                    debug_log_raw=debug_log_raw,
+                    debug_log_filter_reasons=debug_log_drop,
+                    debug_leaf_tid=leaf_tid_dbg,
+                )
 
             # Model 2 detailed logs are optional to avoid per-frame I/O overhead.
             if _dbg_frame_log:

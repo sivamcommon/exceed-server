@@ -719,6 +719,127 @@ def extract_masked_leaf_crop(frame_bgr, leaf_box: Tuple[float, float, float, flo
 # Stage 2: Defect detection on individual leaf crops
 # ---------------------------------------------------------------------------
 
+def run_defect_batch(
+    defect_model,
+    frame_bgr,
+    leaf_boxes: List[Tuple[float, float, float, float]],
+    leaf_masks: list,
+    imgsz: int | None,
+    conf: float,
+    device: int,
+    min_area_px: dict | None = None,
+) -> List[list]:
+    """
+    Run defect model on all leaves in one batched GPU call (RF-DETR dynamic-batch engine).
+    Returns list of defect-dict lists, one per leaf, in the same order as leaf_boxes.
+    Falls back to sequential run_defect_on_leaf if batch not supported.
+    """
+    if defect_model is None or bool(getattr(defect_model, "_gomicro_disabled", False)):
+        return [[] for _ in leaf_boxes]
+
+    _cls = getattr(type(defect_model), "__name__", "")
+    if _cls != "RFDETRDefectWrapper" or not defect_model.supports_batch:
+        return [
+            run_defect_on_leaf(defect_model, frame_bgr, box, mask, imgsz, conf, device, min_area_px=min_area_px)
+            for box, mask in zip(leaf_boxes, leaf_masks)
+        ]
+
+    # Compute min_conf across all defect classes (same as run_defect_on_leaf)
+    cc = get_class_config()
+    defect_section = cc.get("defect_model", {})
+    default_entry = defect_section.get("_default", {})
+    alias_map = _build_alias_map(defect_section)
+    min_conf = conf
+    for key, entry in defect_section.items():
+        if key.startswith("_"):
+            continue
+        c = float(entry.get("confidence", default_entry.get("confidence", conf)))
+        if c < min_conf:
+            min_conf = c
+
+    # Extract and pre-scale all crops
+    crops = []
+    offsets = []   # (ix1, iy1, scale_x, scale_y) per leaf
+    valid_idx = []  # indices of leaves that produced a non-empty crop
+    for i, (leaf_box, leaf_mask) in enumerate(zip(leaf_boxes, leaf_masks)):
+        crop = extract_masked_leaf_crop(frame_bgr, leaf_box, leaf_mask)
+        if crop is None:
+            offsets.append(None)
+            continue
+        _MAX_CROP = 640
+        h_c, w_c = crop.shape[:2]
+        sx = sy = 1.0
+        if h_c > _MAX_CROP or w_c > _MAX_CROP:
+            scale = _MAX_CROP / max(h_c, w_c)
+            nw = max(1, int(w_c * scale))
+            nh = max(1, int(h_c * scale))
+            crop = cv2.resize(crop, (nw, nh), interpolation=cv2.INTER_LINEAR)
+            sx = nw / w_c
+            sy = nh / h_c
+        x1, y1 = leaf_box[0], leaf_box[1]
+        offsets.append((max(0, int(x1)), max(0, int(y1)), sx, sy))
+        crops.append(crop)
+        valid_idx.append(i)
+
+    all_defects: List[list] = [[] for _ in leaf_boxes]
+    if not crops:
+        return all_defects
+
+    try:
+        batch_results = defect_model.predict_batch(crops, conf=min_conf, imgsz=imgsz)
+    except Exception as exc:
+        setattr(defect_model, "_gomicro_disabled", True)
+        if not getattr(defect_model, "_gomicro_disable_warned", False):
+            logging.exception("Defect model batch call failed — stage-2 disabled: %s", exc)
+            setattr(defect_model, "_gomicro_disable_warned", True)
+        return all_defects
+
+    for batch_pos, leaf_i in enumerate(valid_idx):
+        d_results = batch_results[batch_pos]
+        if not d_results or d_results[0].boxes is None or len(d_results[0].boxes) == 0:
+            continue
+        d_res = d_results[0]
+        ix1, iy1, scale_x, scale_y = offsets[leaf_i]
+        d_xyxy = d_res.boxes.xyxy.cpu().numpy()
+        d_conf = d_res.boxes.conf.cpu().numpy()
+        d_cls_ids = d_res.boxes.cls.cpu().numpy().astype(int)
+        d_names = d_res.names if hasattr(d_res, "names") else {}
+
+        defects = []
+        for j in range(len(d_xyxy)):
+            dx1, dy1, dx2, dy2 = d_xyxy[j]
+            raw_cname = class_name(d_names, int(d_cls_ids[j]))
+            raw_cname = _resolve_raw_class_name(raw_cname, defect_section)
+            cconf = float(d_conf[j])
+            w = float(dx2) - float(dx1)
+            h = float(dy2) - float(dy1)
+            area = max(0.0, w * h)
+            cls_key, cls_entry = resolve_class(raw_cname, defect_section, alias_map)
+            mapped_label = cls_entry.get("label", cls_key)
+            conf_threshold = float(cls_entry.get("confidence", default_entry.get("confidence", conf)))
+            if cconf < conf_threshold:
+                continue
+            min_w, min_h = _get_min_hw(cls_entry, default_entry)
+            if w < min_w or h < min_h:
+                continue
+            if min_area_px is not None:
+                min_area = float(min_area_px.get(cls_key, min_area_px.get("other", 0)))
+            else:
+                min_area = float(cls_entry.get("min_area_px", default_entry.get("min_area_px", 0)))
+            if area < min_area:
+                continue
+            defects.append({
+                "box": (ix1 + int(dx1 / scale_x), iy1 + int(dy1 / scale_y),
+                        ix1 + int(dx2 / scale_x), iy1 + int(dy2 / scale_y)),
+                "name": cls_key,
+                "label": mapped_label,
+                "conf": cconf,
+            })
+        all_defects[leaf_i] = dedup_defects_keep_biggest_overlap(defects, overlap_thresh=0.8)
+
+    return all_defects
+
+
 def run_defect_on_leaf(
     defect_model,
     frame_bgr,

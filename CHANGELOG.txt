@@ -1,2 +1,5 @@
+v1.1.0 — 2026-05-15
+Dynamic-batch RF-DETR engine: re-exported ONNX with dynamic_batch=True, built rfdetr_dynamic_fp16.engine (batch 1–16). All leaves now processed in one GPU call per frame instead of N sequential calls (~5–10× stage-2 speedup for typical leaf counts).
+
 v1.0.0 — 2026-05-14
 Fixed rfdetr model not loading (imgsz 640→512, switched to fp16 engine). Removed sudo password prompt at startup, added configurable GC interval per frame.

@@ -1,6 +1,6 @@
 {
   "model": {
-    "path": "models/rfdetr_fp16.engine",
+    "path": "models/rfdetr_dynamic_fp16.engine",
     "backend": "rfdetr",
     "config": {
       "size_measure_enabled": false,

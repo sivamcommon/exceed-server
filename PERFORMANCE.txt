@@ -4,7 +4,7 @@ Status: [ ] not started  [~] in progress  [x] done
 
 [x] 1. rfdetr engine wrong size (imgsz 640 vs engine 512) — model silently failing every frame
 [x] 2. rfdetr fp32 instead of fp16 — 2x slower GPU compute for no reason
-[ ] 3. RF-DETR called N times per frame sequentially — 10 leaves = 10 GPU inferences = ~500ms
+[x] 3. RF-DETR called N times per frame sequentially — 10 leaves = 10 GPU inferences = ~500ms
 [ ] 4. get_class_config() called inside per-leaf loop — file read + dict loop on every single leaf
 [ ] 5. masks_xy ignored, GPU mask tensor used instead — N CUDA sync stalls, already have CPU polygon
 [ ] 6. retina_masks=True — Ultralytics upsamples all masks to 1920x1080 on GPU every frame
@@ -14,3 +14,4 @@ SOLVED
 ==========================================================
 #1 — rfdetr imgsz fixed 640→512 in model2_config.json
 #2 — switched model2_config.json path to rfdetr_fp16.engine
+#3 — re-exported RF-DETR ONNX with dynamic_batch=True via rfdetr.export(), built rfdetr_dynamic_fp16.engine (min=1 opt=6 max=16); all N leaves now processed in one TRT call per frame

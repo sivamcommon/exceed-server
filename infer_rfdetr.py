@@ -167,43 +167,71 @@ class RFDETRTensorrtPredictor:
             [(n, self.name_to_shape.get(n)) for n in self.output_names],
         )
 
-        # Allocate device buffers once (static shapes for this export path).
-        self._device_buffers: Dict[str, torch.Tensor] = {}
-        for name, shape in self.name_to_shape.items():
-            self._device_buffers[name] = torch.empty(shape, dtype=self.name_to_torch_dtype[name], device="cuda")
+        # Detect dynamic-batch engine (batch dim == -1) and allocate buffers.
+        input_shape = tuple(self.engine.get_tensor_shape(self.input_name))
+        self._is_dynamic_batch = (len(input_shape) > 0 and input_shape[0] < 0)
+        if self._is_dynamic_batch:
+            try:
+                profile_shapes = self.engine.get_tensor_profile_shape(self.input_name, 0)
+                self._max_batch = int(profile_shapes[2][0])
+            except Exception:
+                self._max_batch = 16
+            self._device_buffers = {}
+            for name in self.name_to_shape:
+                orig = self.name_to_shape[name]
+                alloc = tuple(self._max_batch if d < 0 else d for d in orig)
+                self._device_buffers[name] = torch.empty(alloc, dtype=self.name_to_torch_dtype[name], device="cuda")
+            logging.info("RF-DETR TRT dynamic-batch engine, max_batch=%d", self._max_batch)
+        else:
+            self._max_batch = 1
+            self._device_buffers = {}
+            for name, shape in self.name_to_shape.items():
+                self._device_buffers[name] = torch.empty(shape, dtype=self.name_to_torch_dtype[name], device="cuda")
         self._input_buffer = self._device_buffers[self.input_name]
 
+    def _execute(self, n: int) -> Tuple[np.ndarray, np.ndarray]:
+        """Set addresses, execute TRT, return (dets[n], labels[n]) as float32 numpy."""
+        if self._is_dynamic_batch:
+            h, w = self._input_buffer.shape[2], self._input_buffer.shape[3]
+            self.context.set_input_shape(self.input_name, (n, 3, h, w))
+        self.context.set_tensor_address(self.input_name, int(self._input_buffer.data_ptr()))
+        for oname in self.output_names:
+            self.context.set_tensor_address(oname, int(self._device_buffers[oname].data_ptr()))
+        ok = self.context.execute_async_v3(torch.cuda.current_stream().cuda_stream)
+        if not ok:
+            raise RuntimeError("TensorRT execute_async_v3 failed")
+        torch.cuda.current_stream().synchronize()
+        name_set = set(self.output_names)
+        dets_name = "dets" if "dets" in name_set else self.output_names[0]
+        labels_name = "labels" if "labels" in name_set else self.output_names[1]
+        dets = self._device_buffers[dets_name][:n].detach().cpu().float().numpy()
+        labels = self._device_buffers[labels_name][:n].detach().cpu().float().numpy()
+        return dets, labels
+
     def predict_arrays(self, chw01: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
-        """
-        Args:
-            chw01: float32 array shaped [1,3,H,W] in [0,1] before mean/std normalization.
-        """
+        """chw01: float32 [1,3,H,W] in [0,1]."""
         x = (chw01.astype(np.float32) - self.means) / self.stds
         x_cpu = torch.from_numpy(x)
         if x_cpu.dtype != self._input_buffer.dtype:
             x_cpu = x_cpu.to(dtype=self._input_buffer.dtype)
-        # Reuse preallocated CUDA input tensor to avoid per-leaf CUDA allocations.
-        # non_blocking=True: DMA runs in background while CPU sets tensor addresses.
-        self._input_buffer.copy_(x_cpu, non_blocking=True)
+        self._input_buffer[:1].copy_(x_cpu, non_blocking=True)
+        return self._execute(1)
 
-        # Set tensor addresses (TRT 10 API)
-        self.context.set_tensor_address(self.input_name, int(self._input_buffer.data_ptr()))
-        for oname in self.output_names:
-            self.context.set_tensor_address(oname, int(self._device_buffers[oname].data_ptr()))
-
-        ok = self.context.execute_async_v3(torch.cuda.current_stream().cuda_stream)
-        if not ok:
-            raise RuntimeError("TensorRT execute_async_v3 failed")
-        # Synchronize only the current stream (not all CUDA activity) to unblock output copy.
-        torch.cuda.current_stream().synchronize()
-
-        # Map outputs by typical names; fall back to order.
-        name_set = set(self.output_names)
-        dets_name = "dets" if "dets" in name_set else self.output_names[0]
-        labels_name = "labels" if "labels" in name_set else self.output_names[1]
-        dets = self._device_buffers[dets_name].detach().cpu().numpy()
-        labels = self._device_buffers[labels_name].detach().cpu().numpy()
-        return dets, labels
+    def predict_arrays_batch(self, batch_chw01: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+        """
+        Run N images in one TRT call (dynamic-batch engine only).
+        batch_chw01: float32 [N,3,H,W] in [0,1].
+        Returns (dets [N,Q,4], labels [N,Q,C]).
+        """
+        n = int(batch_chw01.shape[0])
+        if n < 1 or n > self._max_batch:
+            raise ValueError(f"batch size {n} out of range [1, {self._max_batch}]")
+        x = (batch_chw01.astype(np.float32) - self.means) / self.stds
+        x_cpu = torch.from_numpy(x)
+        if x_cpu.dtype != self._input_buffer.dtype:
+            x_cpu = x_cpu.to(dtype=self._input_buffer.dtype)
+        self._input_buffer[:n].copy_(x_cpu, non_blocking=True)
+        return self._execute(n)
 
 
 def rfdetr_postprocess_topk(
@@ -393,12 +421,18 @@ class RFDETRDefectWrapper:
         else:
             raise ValueError(f"Unsupported RF-DETR artifact extension: {ext} ({self.path})")
 
+    @property
+    def supports_batch(self) -> bool:
+        """True when the loaded TRT engine supports dynamic batch > 1."""
+        return self._ort is not None and self._ort._is_dynamic_batch
+
     def runtime_summary(self) -> str:
         """Short string for startup logs (whether TRT or PyTorch path is active)."""
         if self._ort is not None:
             inm = self._ort.input_name
             shp = self._ort.name_to_shape.get(inm, ())
-            return f"TensorRT input={inm} shape={shp}"
+            batch_info = f" dynamic_batch=True max={self._ort._max_batch}" if self._ort._is_dynamic_batch else ""
+            return f"TensorRT input={inm} shape={shp}{batch_info}"
         if self._torch_model is not None:
             return "PyTorch RF-DETR weights"
         return "no backend"
@@ -528,3 +562,71 @@ class RFDETRDefectWrapper:
         boxes_t = torch.cat([xyxy, scores[:, None], cls_ids[:, None]], dim=1)
         names_map = self._resolve_names_map()
         return [Results(src, path="crop", names=names_map, boxes=boxes_t)]
+
+    def predict_batch(self, crops: List[np.ndarray], conf: float = 0.25, imgsz: Optional[int] = None) -> List:
+        """
+        Run defect inference on N BGR crops in one TRT call.
+        Returns a list of Results lists (one per crop), same format as predict().
+        Falls back to sequential if engine is not dynamic-batch.
+        """
+        if not crops:
+            return []
+        if not self.supports_batch:
+            return [self.predict(source=c, conf=conf, imgsz=imgsz) for c in crops]
+
+        side = int(imgsz) if imgsz is not None else 640
+        if side % 32 != 0:
+            side = int(max(32, (side // 32) * 32))
+
+        max_b = self._ort._max_batch
+        names = self._resolve_names_map()
+        results_all: List = []
+
+        # Process in sub-batches if N > max_batch
+        for start in range(0, len(crops), max_b):
+            batch_crops = crops[start:start + max_b]
+            n = len(batch_crops)
+            hw0s = [(c.shape[0], c.shape[1]) for c in batch_crops]
+
+            chw01_list = []
+            for crop in batch_crops:
+                chw01_list.append(preprocess_bgr_to_chw01_square(crop, side)[0])
+            batch_chw01 = np.stack(chw01_list, axis=0)  # [n, 3, side, side]
+
+            dets_batch, labels_batch = self._ort.predict_arrays_batch(batch_chw01)
+
+            for idx, (h0, w0) in enumerate(hw0s):
+                crop = batch_crops[idx]
+                d0 = dets_batch[idx]
+                l0 = labels_batch[idx]
+
+                if d0.ndim == 2 and d0.shape[-1] >= 5 and l0.ndim in (1, 2):
+                    xyxy = d0[:, :4].astype(np.float32, copy=False)
+                    scores = d0[:, 4].astype(np.float32, copy=False)
+                    cls_ids = (l0[:, 0] if l0.ndim == 2 else l0).astype(np.int64, copy=False)
+                else:
+                    xyxy, scores, cls_ids = rfdetr_postprocess_topk(
+                        l0[None], d0[None], orig_hw=(side, side), num_select=300
+                    )
+
+                keep = scores >= conf
+                xyxy = xyxy[keep]; scores = scores[keep]; cls_ids = cls_ids[keep]
+                sx = float(w0) / float(side)
+                sy = float(h0) / float(side)
+                xyxy[:, [0, 2]] *= sx
+                xyxy[:, [1, 3]] *= sy
+                xyxy[:, [0, 2]] = np.clip(xyxy[:, [0, 2]], 0.0, max(0.0, float(w0 - 1)))
+                xyxy[:, [1, 3]] = np.clip(xyxy[:, [1, 3]], 0.0, max(0.0, float(h0 - 1)))
+                ww = xyxy[:, 2] - xyxy[:, 0]; hh = xyxy[:, 3] - xyxy[:, 1]
+                valid = (ww >= 1.0) & (hh >= 1.0)
+                xyxy = xyxy[valid]; scores = scores[valid]; cls_ids = cls_ids[valid]
+
+                if len(xyxy):
+                    boxes_t = torch.from_numpy(
+                        np.concatenate([xyxy, scores[:, None], cls_ids[:, None].astype(np.float32)], axis=1)
+                    )
+                else:
+                    boxes_t = torch.zeros((0, 6), dtype=torch.float32)
+                results_all.append([Results(crop, path="crop", names=names, boxes=boxes_t)])
+
+        return results_all
