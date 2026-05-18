@@ -795,7 +795,12 @@ def run_defect_batch(
     except Exception as exc:
         setattr(defect_model, "_gomicro_disabled", True)
         if not getattr(defect_model, "_gomicro_disable_warned", False):
-            logging.exception("Defect model batch call failed — stage-2 disabled: %s", exc)
+            import traceback
+            logging.error(
+                "Defect model batch call failed — stage-2 disabled: %s\n%s",
+                exc, traceback.format_exc(),
+            )
+            print(f"[ERROR] Defect model disabled: {exc}", flush=True)
             setattr(defect_model, "_gomicro_disable_warned", True)
         return all_defects
 

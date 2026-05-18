@@ -569,6 +569,8 @@ class RFDETRDefectWrapper:
         Returns a list of Results lists (one per crop), same format as predict().
         Falls back to sequential if engine is not dynamic-batch.
         """
+        from ultralytics.engine.results import Results
+
         if not crops:
             return []
         if not self.supports_batch:

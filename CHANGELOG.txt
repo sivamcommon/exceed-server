@@ -1,3 +1,6 @@
+v1.2.1 — 2026-05-15
+Fixed stage-2 silently disabled every run: predict_batch used `Results` without importing it, causing a NameError on the first frame which triggered the disable-guard and zeroed all defect detections. Added explicit print+traceback to the disable-guard so failures are visible in the console.
+
 v1.2.0 — 2026-05-15
 Fixed remaining per-frame GPU bottlenecks: retina_masks=False (stops upsampling all masks to 1920×1080), polygon mask path in extract_masked_leaf_crop (zero CUDA syncs for cropping), get_class_config called once per batch not per leaf.
 
